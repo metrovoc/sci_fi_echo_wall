@@ -35,6 +35,7 @@ export function BookReader({ className }: BookReaderProps) {
   const [isAtBottom, setIsAtBottom] = useState(false); // Track if user is at page bottom
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentMouseY = useRef<number>(0); // Track current mouse position
+  const isManualNavigation = useRef<boolean>(false); // Track if it's a manual navigation
 
   useEffect(() => {
     if (window.innerWidth < 1024) {
@@ -143,6 +144,8 @@ export function BookReader({ className }: BookReaderProps) {
         setBook(bookData);
 
         if (bookData.chapters.length > 0) {
+          // For initial load, allow progress restoration
+          isManualNavigation.current = false;
           setCurrentChapter(bookData.chapters[0].id);
           setCurrentChapterIndex(0);
         }
@@ -160,16 +163,22 @@ export function BookReader({ className }: BookReaderProps) {
 
   // Restore reading progress when chapter changes
   useEffect(() => {
-    if (state.currentChapterId && contentRef.current) {
+    if (
+      state.currentChapterId &&
+      contentRef.current &&
+      !isManualNavigation.current
+    ) {
       const progress = getProgress(state.currentChapterId);
       if (progress) {
         setTimeout(() => {
-          if (contentRef.current) {
+          if (contentRef.current && !isManualNavigation.current) {
             contentRef.current.scrollTop = progress.scrollPosition;
           }
         }, 100);
       }
     }
+    // Reset the flag after handling
+    isManualNavigation.current = false;
   }, [state.currentChapterId, getProgress]);
 
   // Track reading progress and scroll position
@@ -217,15 +226,27 @@ export function BookReader({ className }: BookReaderProps) {
     (ch) => ch.id === state.currentChapterId
   );
 
-  const navigateToChapter = (chapterId: string) => {
+  const navigateToChapter = (
+    chapterId: string,
+    restoreProgress: boolean = false
+  ) => {
     const index = book?.chapters.findIndex((ch) => ch.id === chapterId) ?? -1;
     if (index !== -1) {
+      // Set flag to control progress restoration
+      isManualNavigation.current = !restoreProgress;
       setCurrentChapter(chapterId);
       setCurrentChapterIndex(index);
       setSidebarOpen(false);
-      if (contentRef.current) {
-        contentRef.current.scrollTop = 0;
+
+      // Use setTimeout to ensure scroll happens after DOM update
+      if (!restoreProgress) {
+        setTimeout(() => {
+          if (contentRef.current) {
+            contentRef.current.scrollTop = 0;
+          }
+        }, 0);
       }
+
       // Show toolbar briefly when navigating
       setShowToolbar(true);
       scheduleHide();
